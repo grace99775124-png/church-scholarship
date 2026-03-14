@@ -1,13 +1,54 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "sqlite"
+}
+
+model AdminUser {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model Scholarship {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  description  String?
+  amount       Int           @default(0)
+  attachments  String
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  applications Application[]
+}
+
+model Application {
+  id                 Int         @id @default(autoincrement())
+  studentName        String
+  birthDate          String
+  school             String
+  schoolLevel        String
+  grade              String
+  semester           Int
+  year               Int
+  contact            String
+  scholarshipId      Int
+  scholarship        Scholarship @relation(fields: [scholarshipId], references: [id])
+  reason             String
+  recommenderName    String?
+  recommenderTitle   String?
+  recommenderPhone   String?
+  recommenderComment String?
+  status             String      @default("pending")
+  statusNote         String?
+  paidAmount         Int?
+  paidAt             DateTime?
+  reviewedAt         DateTime?
+  reviewedBy         String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 }
