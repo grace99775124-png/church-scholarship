@@ -9,14 +9,26 @@ interface Scholarship {
   name: string
   description: string
   amount: number
+  amount_k12: number
+  amount_univ: number
+  amount_grad: number
 }
 
 const SCHOOL_LEVELS = [
   { value: 'primary', label: '초등학교' },
   { value: 'middle', label: '중학교' },
   { value: 'high', label: '고등학교' },
-  { value: 'university', label: '대학교 / 대학원' },
+  { value: 'university', label: '대학교' },
+  { value: 'graduate', label: '대학원' },
 ]
+
+// 학교 구분에 맞는 장학금액 반환
+function getAmount(s: Scholarship, schoolLevel: string): number {
+  if (schoolLevel === 'university') return s.amount_univ || s.amount || 0
+  if (schoolLevel === 'graduate') return s.amount_grad || s.amount_univ || s.amount || 0
+  // primary, middle, high
+  return s.amount_k12 || s.amount || 0
+}
 
 const SCHOLARSHIP_DESC: Record<string, string> = {
   '여호수아 장학금': '대학 입학 대상자에게 지급합니다.',
@@ -53,7 +65,7 @@ export function ApplyForm({ scholarships }: { scholarships: Scholarship[] }) {
     student_name: '',
     birth_date: '',
     school: '',
-    school_level: 'middle',
+    school_level: 'primary',
     grade: '',
     semester: '1',
     year: String(currentYear),
@@ -70,6 +82,7 @@ export function ApplyForm({ scholarships }: { scholarships: Scholarship[] }) {
 
   const selectedScholarship = scholarships.find(s => s.id === selectedId)
   const isSelectedBilip = selectedScholarship?.name.includes('빌립') ?? false
+  const schoolLevel = form.school_level
 
   // 이름 + 생년월일 입력되면 기존 사진 자동 조회
   const lookupPhoto = useCallback(async (name: string, birthDate: string) => {
@@ -202,9 +215,17 @@ export function ApplyForm({ scholarships }: { scholarships: Scholarship[] }) {
           원칙적으로 하나만 선택합니다. 빌립 장학금은 다른 장학금과 중복 신청할 수 있습니다.
         </p>
 
+        {/* 학교 구분 미선택 시 안내 */}
+        {!schoolLevel && (
+          <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
+            학생 정보의 학교 구분을 먼저 선택하면 해당 금액이 표시됩니다.
+          </p>
+        )}
+
         <div className="space-y-2">
           {scholarships.map(s => {
             const checked = selectedId === s.id
+            const amt = getAmount(s, schoolLevel)
             return (
               <label
                 key={s.id}
@@ -223,8 +244,8 @@ export function ApplyForm({ scholarships }: { scholarships: Scholarship[] }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm whitespace-nowrap">{s.name}</span>
-                    {s.amount > 0 && (
-                      <span className="text-xs text-blue-600 font-semibold whitespace-nowrap">{s.amount.toLocaleString()}원</span>
+                    {amt > 0 && (
+                      <span className="text-xs text-blue-600 font-semibold whitespace-nowrap">{amt.toLocaleString()}원</span>
                     )}
                     {s.name.includes('빌립') && (
                       <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5 whitespace-nowrap">중복 가능</span>
@@ -252,8 +273,8 @@ export function ApplyForm({ scholarships }: { scholarships: Scholarship[] }) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-medium text-sm">빌립 장학금 중복 신청</span>
-                {bilipScholarship.amount > 0 && (
-                  <span className="text-xs text-orange-600 font-semibold whitespace-nowrap">+{bilipScholarship.amount.toLocaleString()}원</span>
+                {getAmount(bilipScholarship, schoolLevel) > 0 && (
+                  <span className="text-xs text-orange-600 font-semibold whitespace-nowrap">+{getAmount(bilipScholarship, schoolLevel).toLocaleString()}원</span>
                 )}
               </div>
               <p className="text-xs text-gray-500 mt-0.5" style={{ wordBreak: 'keep-all' }}>
@@ -266,8 +287,15 @@ export function ApplyForm({ scholarships }: { scholarships: Scholarship[] }) {
         {selectedId && (
           <div className="mt-3 text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
             선택된 장학금: <strong>{selectedScholarship?.name}</strong>
+            {selectedScholarship && getAmount(selectedScholarship, schoolLevel) > 0 && (
+              <span className="ml-1 font-semibold">({getAmount(selectedScholarship, schoolLevel).toLocaleString()}원)</span>
+            )}
             {includeBilip && !isSelectedBilip && bilipScholarship && (
-              <> + <strong>{bilipScholarship.name}</strong> (중복)</>
+              <> + <strong>{bilipScholarship.name}</strong>
+                {getAmount(bilipScholarship, schoolLevel) > 0 && (
+                  <span className="ml-1">({getAmount(bilipScholarship, schoolLevel).toLocaleString()}원)</span>
+                )}
+              </>
             )}
           </div>
         )}
