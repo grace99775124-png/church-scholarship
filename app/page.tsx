@@ -129,7 +129,7 @@ export default async function HomePage() {
           {/* 5. 제출처 */}
           <div className="flex gap-4">
             <span className="font-bold whitespace-nowrap text-gray-900 w-28 shrink-0">5. 제출처</span>
-            <p>교회사무실, 온라인신청</p>
+            <p>온라인신청, 종이신청서는 교회사무실</p>
           </div>
 
           {/* 6. 선발 절차 */}
