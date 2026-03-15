@@ -191,7 +191,7 @@ export default async function HomePage() {
       </div>
 
       <p className="max-w-2xl mx-auto text-center text-xs text-gray-400 mt-3" style={{ wordBreak: 'keep-all' }}>
-        온라인 신청은 접수 확인용입니다. 반드시 신청서 원본과 증빙서류를 사무실에 제출하여야 합니다.
+        처음 온라인 접수하시는 분은 증명사진을 업로드 해주시기 바랍니다.
       </p>
     </div>
   )
