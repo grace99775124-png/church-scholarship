@@ -25,6 +25,11 @@ const K12_LEVELS = ['primary', 'middle', 'high']
 
 // 학교 구분에 따라 신청 가능한 장학금 필터
 function filterScholarships(scholarships: Scholarship[], schoolLevel: string): Scholarship[] {
+  if (schoolLevel === 'high') {
+    return scholarships.filter(s =>
+      s.name.includes('여호수아') || s.name.includes('바나바') || s.name.includes('빌립') || s.name.includes('특별')
+    )
+  }
   if (K12_LEVELS.includes(schoolLevel)) {
     return scholarships.filter(s =>
       s.name.includes('바나바') || s.name.includes('빌립') || s.name.includes('특별')
