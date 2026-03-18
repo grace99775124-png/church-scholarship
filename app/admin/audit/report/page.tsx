@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+
+const LS_KEY = 'audit_report_page_v1'
 
 const SECTIONS = [
   { id: 'qualify', icon: '📋', title: '신청 자격 심사', color: '#6c3483', items: [
@@ -60,6 +62,32 @@ export default function AuditReportPage() {
   const [memos, setMemos] = useState<Record<number, string>>({})
   const [verdict, setVerdict] = useState<Verdict>('')
   const [showModal, setShowModal] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+
+  // ── 자동 불러오기 ──
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY)
+      if (raw) {
+        const d = JSON.parse(raw)
+        if (d.form) setForm(d.form)
+        if (d.cs) setCs(d.cs)
+        if (d.memos) setMemos(d.memos)
+        if (d.verdict) setVerdict(d.verdict)
+      }
+    } catch {}
+  }, [])
+
+  // ── 자동 저장 ──
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify({ form, cs, memos, verdict }))
+        setSavedAt(new Date().toLocaleTimeString('ko-KR'))
+      } catch {}
+    }, 800)
+    return () => clearTimeout(id)
+  }, [form, cs, memos, verdict])
 
   const f = (key: keyof typeof form) => ({
     value: form[key],
@@ -198,6 +226,14 @@ ${['담당자','재정부장','감사위원','감사위원장','담임목사'].m
     URL.revokeObjectURL(url)
   }
 
+  function downloadPDF() {
+    const win = window.open('', '_blank', 'width=860,height=1100')
+    if (!win) { alert('팝업이 차단되어 있습니다. 팝업 허용 후 다시 시도해주세요.'); return }
+    win.document.write(buildHTML())
+    win.document.close()
+    setTimeout(() => win.print(), 800)
+  }
+
   // 아코디언 헤더
   function SectionHead({ id, icon, title, badge }: { id: keyof typeof open; icon: string; title: string; badge: { text: string; bg: string; color: string } }) {
     return (
@@ -221,7 +257,10 @@ ${['담당자','재정부장','감사위원','감사위원장','담임목사'].m
     <div style={{ maxWidth: 780, margin: '0 auto', paddingBottom: 80 }}>
       {/* 헤더 */}
       <div style={{ background: 'linear-gradient(135deg,#2c1654,#6c3483)', borderRadius: 14, padding: '24px 28px', color: 'white', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>🎓 장학위원회 자체 감사 보고서</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>🎓 장학위원회 자체 감사 보고서</h1>
+          {savedAt && <span style={{ fontSize: 11, opacity: 0.7 }}>💾 {savedAt} 저장됨</span>}
+        </div>
         <p style={{ fontSize: 12, opacity: 0.75 }}>해운대순복음교회 · 감사 결과 입력 후 HTML 보고서로 출력하세요</p>
         <div style={{ background: 'rgba(255,255,255,.2)', borderRadius: 99, height: 5, marginTop: 12 }}>
           <div style={{ width: `${progress}%`, height: '100%', background: 'rgba(255,255,255,.7)', borderRadius: 99, transition: 'width .4s' }} />
@@ -355,12 +394,15 @@ ${['담당자','재정부장','감사위원','감사위원장','담임목사'].m
       </div>
 
       {/* 하단 버튼 */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid #e5e7eb', padding: '12px 16px', display: 'flex', gap: 10, zIndex: 50 }}>
-        <button onClick={() => setShowModal(true)} style={{ flex: 1, background: '#f9fafb', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid #e5e7eb', padding: '12px 16px', display: 'flex', gap: 8, zIndex: 50 }}>
+        <button onClick={() => setShowModal(true)} style={{ flex: 1, background: '#f9fafb', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
           👁 미리보기
         </button>
-        <button onClick={download} style={{ flex: 1, background: 'linear-gradient(135deg,#6c3483,#9b59b6)', color: 'white', border: 'none', borderRadius: 8, padding: 12, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-          ⬇ HTML 보고서 저장
+        <button onClick={downloadPDF} style={{ flex: 1, background: 'linear-gradient(135deg,#1a5276,#2980b9)', color: 'white', border: 'none', borderRadius: 8, padding: 12, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+          🖨 PDF 인쇄
+        </button>
+        <button onClick={download} style={{ flex: 1, background: 'linear-gradient(135deg,#6c3483,#9b59b6)', color: 'white', border: 'none', borderRadius: 8, padding: 12, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+          ⬇ HTML 저장
         </button>
       </div>
 
