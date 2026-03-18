@@ -39,6 +39,12 @@ const SECTIONS = [
 type Status = 'none' | 'good' | 'bad' | 'na'
 type CheckItem = { status: Status; memo: string }
 type Checks = Record<string, Record<number, CheckItem>>
+type AuditRecord = {
+  key: string         // e.g. "2025_1학기"
+  year: string; sem: string; date: string; auditor: string
+  checks: Checks; aiResult: string; rptOpinion: string
+  score: number; savedAt: string
+}
 
 function initChecks(): Checks {
   const c: Checks = {}
@@ -49,9 +55,8 @@ function initChecks(): Checks {
   return c
 }
 
-const LS_CHECKS = 'audit_checks_v1'
-const LS_RPT = 'audit_report_info_v1'
-const LS_AI = 'audit_ai_result_v1'
+const LS_DRAFT   = 'audit_draft_v2'     // 현재 작업 중인 임시 데이터
+const LS_RECORDS = 'audit_records_v2'   // 저장 완료된 감사 목록
 
 export default function AuditPage() {
   const [checks, setChecks] = useState<Checks>(initChecks)
@@ -70,31 +75,33 @@ export default function AuditPage() {
   const [rptOpinion, setRptOpinion] = useState('')
   const [rptLoading, setRptLoading] = useState(false)
 
+  // 감사 기록 관련
+  const [records, setRecords] = useState<AuditRecord[]>([])
+  const [showRecords, setShowRecords] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ── 자동 불러오기 ──
+  // ── 초기 로드 ──
   useEffect(() => {
     try {
-      const c = localStorage.getItem(LS_CHECKS)
-      if (c) setChecks(JSON.parse(c))
-      const r = localStorage.getItem(LS_RPT)
-      if (r) {
-        const parsed = JSON.parse(r)
-        setRptInfo(parsed.info || {})
-        setRptOpinion(parsed.opinion || '')
+      const draft = localStorage.getItem(LS_DRAFT)
+      if (draft) {
+        const d = JSON.parse(draft)
+        if (d.checks) setChecks(d.checks)
+        if (d.rptInfo) setRptInfo(d.rptInfo)
+        if (d.rptOpinion) setRptOpinion(d.rptOpinion)
+        if (d.aiResult) setAiResult(d.aiResult)
       }
-      const a = localStorage.getItem(LS_AI)
-      if (a) setAiResult(a)
+      const recs = localStorage.getItem(LS_RECORDS)
+      if (recs) setRecords(JSON.parse(recs))
     } catch {}
   }, [])
 
-  // ── 자동 저장 ──
+  // ── 자동 저장 (임시) ──
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        localStorage.setItem(LS_CHECKS, JSON.stringify(checks))
-        localStorage.setItem(LS_AI, aiResult)
-        localStorage.setItem(LS_RPT, JSON.stringify({ info: rptInfo, opinion: rptOpinion }))
+        localStorage.setItem(LS_DRAFT, JSON.stringify({ checks, rptInfo, rptOpinion, aiResult }))
         setSavedAt(new Date().toLocaleTimeString('ko-KR'))
       } catch {}
     }, 800)
@@ -131,6 +138,57 @@ export default function AuditPage() {
       ...prev,
       [sid]: { ...prev[sid], [idx]: { ...prev[sid][idx], memo: val } },
     }))
+  }
+
+  // ── 감사 저장 (마감) ──
+  function saveRecord() {
+    const totals = getTotals()
+    const score = totals.done > 0 ? Math.round((totals.good + totals.na) / totals.done * 100) : 0
+    const key = `${rptInfo.year || '미입력'}_${rptInfo.sem || '미입력'}`
+    const record: AuditRecord = {
+      key, year: rptInfo.year, sem: rptInfo.sem, date: rptInfo.date, auditor: rptInfo.auditor,
+      checks, aiResult, rptOpinion, score,
+      savedAt: new Date().toLocaleString('ko-KR'),
+    }
+    const updated = [record, ...records.filter(r => r.key !== key)]
+    setRecords(updated)
+    try { localStorage.setItem(LS_RECORDS, JSON.stringify(updated)) } catch {}
+    alert(`✅ "${rptInfo.year || ''}년 ${rptInfo.sem || ''}" 감사가 저장되었습니다.\n\n새 감사를 시작하려면 "새 감사 시작" 버튼을 누르세요.`)
+  }
+
+  // ── 새 감사 시작 ──
+  function startNew() {
+    if (!confirm('현재 작업 중인 감사를 초기화하고 새 감사를 시작합니다.\n먼저 "감사 저장"으로 저장했는지 확인하세요.\n\n계속하시겠습니까?')) return
+    const fresh = initChecks()
+    setChecks(fresh)
+    setRptInfo({ year: '', sem: '', date: '', auditor: '' })
+    setRptOpinion('')
+    setAiResult('')
+    setMemoInput('')
+    setFileContent('')
+    setFileName('')
+    setActiveTab('checklist')
+    setActiveSection('qualify')
+    try { localStorage.removeItem(LS_DRAFT) } catch {}
+  }
+
+  // ── 기록 불러오기 ──
+  function loadRecord(rec: AuditRecord) {
+    if (!confirm(`"${rec.year}년 ${rec.sem}" 감사 기록을 불러옵니다.\n현재 작업 중인 내용은 덮어씌워집니다.\n\n계속하시겠습니까?`)) return
+    setChecks(rec.checks)
+    setRptInfo({ year: rec.year, sem: rec.sem, date: rec.date, auditor: rec.auditor })
+    setRptOpinion(rec.rptOpinion)
+    setAiResult(rec.aiResult)
+    setShowRecords(false)
+    setActiveTab('rpt')
+  }
+
+  // ── 기록 삭제 ──
+  function deleteRecord(key: string) {
+    if (!confirm('이 감사 기록을 삭제하시겠습니까?')) return
+    const updated = records.filter(r => r.key !== key)
+    setRecords(updated)
+    try { localStorage.setItem(LS_RECORDS, JSON.stringify(updated)) } catch {}
   }
 
   async function handleFile(file: File) {
@@ -177,7 +235,6 @@ export default function AuditPage() {
     setAiLoading(false)
   }
 
-  // ── 감사보고서 자동 작성 (AI) ──
   function buildChecklistSummary() {
     const totals = getTotals()
     const score = totals.done > 0 ? Math.round((totals.good + totals.na) / totals.done * 100) : 0
@@ -210,7 +267,6 @@ export default function AuditPage() {
     setRptLoading(false)
   }
 
-  // ── PDF 다운로드 ──
   function buildReportHTML() {
     const totals = getTotals()
     const score = totals.done > 0 ? Math.round((totals.good + totals.na) / totals.done * 100) : 0
@@ -308,7 +364,15 @@ ${['담당자','재정부장','감사위원','감사위원장','담임목사'].m
         <div style={{ fontSize: 10, opacity: 0.7, letterSpacing: 2, marginBottom: 3 }}>해운대순복음교회</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontSize: 16, fontWeight: 500 }}>🎓 장학위원회 자체 감사시스템</div>
-          {savedAt && <div style={{ fontSize: 10, opacity: 0.65 }}>💾 {savedAt} 자동저장</div>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {savedAt && <div style={{ fontSize: 10, opacity: 0.65 }}>💾 {savedAt} 임시저장</div>}
+            <button onClick={() => setShowRecords(true)} style={{
+              background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', borderRadius: 6,
+              padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              📂 감사 기록 {records.length > 0 ? `(${records.length}건)` : ''}
+            </button>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           {[
@@ -464,7 +528,7 @@ ${['담당자','재정부장','감사위원','감사위원장','담임목사'].m
           </div>
         </div>
 
-        {/* 감사 보고 탭 (적합도 요약) */}
+        {/* 감사 보고 탭 */}
         <div style={{ display: activeTab === 'report' ? 'block' : 'none', height: '100%', overflowY: 'auto', padding: 14 }}>
           <div style={{ maxWidth: 680 }}>
             <div style={{ background: 'linear-gradient(135deg,#2c1654,#6c3483)', borderRadius: 12, padding: 18, color: 'white', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -547,7 +611,7 @@ ${['담당자','재정부장','감사위원','감사위원장','담임목사'].m
               </div>
             </div>
 
-            {/* 자동 생성 보고서 미리보기 */}
+            {/* 영역별 결과 */}
             <div style={{ background: '#fff', borderRadius: 10, padding: 16, marginBottom: 12, border: '1px solid #e5e7eb' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>📊 영역별 결과 (자동 생성)</div>
@@ -589,19 +653,88 @@ ${['담당자','재정부장','감사위원','감사위원장','담임목사'].m
                 style={{ width: '100%', minHeight: 140, border: '1px solid #e5e7eb', borderRadius: 7, padding: 10, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.8 }} />
             </div>
 
-            {/* 다운로드 버튼 */}
-            <div style={{ display: 'flex', gap: 10 }}>
+            {/* 저장 / 새 감사 / PDF */}
+            <div style={{ background: '#fffbf0', borderRadius: 10, padding: 14, marginBottom: 12, border: '1px solid #f5e6b0' }}>
+              <div style={{ fontSize: 12, color: '#92600a', marginBottom: 10, fontWeight: 500 }}>
+                💡 감사가 완료되면 저장하고, 다음 학기 감사 시 "새 감사 시작"을 누르세요.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={saveRecord} style={{
+                  flex: 2, background: 'linear-gradient(135deg,#1d6a4a,#27ae60)', color: 'white', border: 'none',
+                  borderRadius: 8, padding: '11px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                }}>💾 이번 감사 저장</button>
+                <button onClick={startNew} style={{
+                  flex: 1, background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db',
+                  borderRadius: 8, padding: '11px 0', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                }}>🆕 새 감사 시작</button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
               <button onClick={downloadPDF} style={{
                 flex: 1, background: 'linear-gradient(135deg,#2c1654,#6c3483)', color: 'white', border: 'none',
                 borderRadius: 8, padding: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
               }}>📥 PDF 다운로드 (인쇄)</button>
             </div>
-            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 }}>
               새 창에서 열린 후 인쇄 → PDF로 저장 선택
             </div>
           </div>
         </div>
       </div>
+
+      {/* 감사 기록 모달 */}
+      {showRecords && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg,#2c1654,#6c3483)', padding: '16px 20px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>📂 감사 기록</div>
+                <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>저장된 감사 {records.length}건</div>
+              </div>
+              <button onClick={() => setShowRecords(false)} style={{ background: 'rgba(255,255,255,.2)', border: 'none', color: 'white', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontFamily: 'inherit' }}>닫기</button>
+            </div>
+            <div style={{ overflowY: 'auto', padding: 16, flex: 1 }}>
+              {records.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af', fontSize: 13 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                  저장된 감사 기록이 없습니다.<br />감사를 완료하고 "이번 감사 저장"을 누르세요.
+                </div>
+              ) : (
+                records.map(rec => {
+                  const sc = rec.score
+                  const scC = sc >= 80 ? '#27ae60' : sc >= 60 ? '#f39c12' : '#e74c3c'
+                  return (
+                    <div key={rec.key} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', marginBottom: 10, background: '#fafafa' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>{rec.year}년 {rec.sem}</div>
+                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>감사일: {rec.date || '미입력'} · 담당: {rec.auditor || '미입력'}</div>
+                          <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 1 }}>저장: {rec.savedAt}</div>
+                        </div>
+                        <div style={{ textAlign: 'center', minWidth: 60 }}>
+                          <div style={{ fontSize: 26, fontWeight: 700, color: scC }}>{sc}점</div>
+                          <div style={{ fontSize: 10, color: scC }}>{sc >= 80 ? '양호' : sc >= 60 ? '보통' : '미흡'}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => loadRecord(rec)} style={{
+                          flex: 1, background: 'linear-gradient(135deg,#6c3483,#9b59b6)', color: 'white', border: 'none',
+                          borderRadius: 7, padding: '8px 0', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                        }}>📂 불러오기</button>
+                        <button onClick={() => deleteRecord(rec.key)} style={{
+                          background: '#fff', color: '#e74c3c', border: '1px solid #fcd0cc',
+                          borderRadius: 7, padding: '8px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+                        }}>🗑 삭제</button>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
